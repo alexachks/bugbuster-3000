@@ -25,30 +25,30 @@ jobs:
           ssh -i ~/.ssh/deploy_key root@${{ secrets.DEPLOY_HOST }} << 'EOF'
             set -e
 
-            # Go to project directory or clone if doesn't exist
-            if [ ! -d "/root/awkward-cliq-agent" ]; then
-              echo "📦 Cloning repository..."
-              cd /root
-              # Use tarball instead of git clone to avoid auth issues
-              curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                https://api.github.com/repos/alexachks/bugbuster-3000/tarball/main \
-                | tar xz
-              mv alexachks-bugbuster-3000-* awkward-cliq-agent
-            fi
-
-            cd /root/awkward-cliq-agent
-
-            # Pull latest changes by downloading tarball
-            echo "📥 Pulling latest changes..."
-            cd /root
-            rm -rf /tmp/awkward-cliq-agent-latest
+            # Download latest code
+            echo "📥 Downloading latest code..."
+            cd /tmp
+            rm -rf bugbuster-latest
             curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               https://api.github.com/repos/alexachks/bugbuster-3000/tarball/main \
-              | tar xz -C /tmp
-            mv /tmp/alexachks-bugbuster-3000-* /tmp/awkward-cliq-agent-latest
-            rsync -av --exclude='node_modules' --exclude='.env' --exclude='agent-memory.md' \
-              /tmp/awkward-cliq-agent-latest/ /root/awkward-cliq-agent/
-            rm -rf /tmp/awkward-cliq-agent-latest
+              | tar xz
+            mv alexachks-bugbuster-3000-* bugbuster-latest
+
+            # Setup project directory
+            if [ ! -d "/root/awkward-cliq-agent" ]; then
+              echo "📦 First deployment - creating directory..."
+              mkdir -p /root/awkward-cliq-agent
+            fi
+
+            # Sync files (preserve .env and agent-memory.md)
+            echo "🔄 Syncing files..."
+            rsync -av --delete \
+              --exclude='node_modules' \
+              --exclude='.env' \
+              --exclude='agent-memory.md' \
+              /tmp/bugbuster-latest/ /root/awkward-cliq-agent/
+
+            rm -rf /tmp/bugbuster-latest
             cd /root/awkward-cliq-agent
 
             # Install Node.js if not present
