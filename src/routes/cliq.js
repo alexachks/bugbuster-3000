@@ -36,7 +36,7 @@ function formatChannelUniqueName(channelName) {
  * Helper: Send message to Cliq channel via Incoming Webhook
  * The webhook handler (Deluge) will post to channel using zoho.cliq.postToChannelAsBot()
  */
-async function sendViaWebhook(channelId, channelName, text) {
+export async function sendViaWebhook(channelId, channelName, text) {
   try {
     console.log(`📤 Sending to channel: ${channelName} (${channelId})`);
 
@@ -126,8 +126,8 @@ async function processWithAgentSDK(data) {
     // Format: "UserName: message" so agent knows who's talking
     const formattedMessage = `${userName}: ${message}`;
 
-    // Get response from agent
-    const response = await agentManager.sendMessage(channelId, formattedMessage);
+    // Get response from agent (messages sent in real-time during processing)
+    const response = await agentManager.sendMessage(channelId, formattedMessage, channelName);
 
     // Check if agent wants to stay silent
     if (response && response.trim() === '[SILENT]') {
@@ -135,11 +135,8 @@ async function processWithAgentSDK(data) {
       return; // Don't send anything to Cliq
     }
 
-    // Send to Cliq
-    if (response && response.trim()) {
-      console.log(`📨 Sending response: ${response.substring(0, 100)}...`);
-      await sendViaWebhook(channelId, channelName, response);
-    }
+    // Messages already sent in real-time during processing
+    console.log(`✅ All messages sent in real-time`);
 
     const stats = agentManager.getSessionStats(channelId);
     console.log(`✅ Finished - Session total: $${stats.totalCost.toFixed(4)} (${stats.messageCount} messages)`);

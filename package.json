@@ -20,6 +20,7 @@
     "helmet": "^7.1.0",
     "morgan": "^1.10.0",
     "simple-git": "^3.25.0",
+    "ssh2": "^1.17.0",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

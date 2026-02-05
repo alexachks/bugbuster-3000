@@ -4,7 +4,8 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { tools, executeTool } from '../tools/bugbuster-tools.js';
+import { tools, executeTool } from '../tools/index.js';
+import { sendViaWebhook } from '../routes/cliq.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -20,6 +21,12 @@ class AgentSDKManager {
     this.sessionStats = new Map();
     // Map: channelId -> timeout ID for auto-cleanup
     this.inactivityTimers = new Map();
+    // Map: channelId -> Promise (processing lock)
+    this.processingLocks = new Map();
+    // Map: channelId -> Array of queued messages
+    this.messageQueues = new Map();
+    // Map: channelId -> channelName (for sending messages)
+    this.channelNames = new Map();
     // Inactivity timeout: 30 minutes
     this.INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
     // Casual system prompt loaded once
@@ -47,16 +54,31 @@ class AgentSDKManager {
     // Use agent project directory, not the cloned repo
     const projectRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
     const claudeMdPath = path.join(projectRoot, '.claude', 'CLAUDE.md');
+    const memoryPath = path.join(projectRoot, 'agent-memory.md');
+
+    let prompt = '';
 
     try {
-      const prompt = fs.readFileSync(claudeMdPath, 'utf-8');
+      prompt = fs.readFileSync(claudeMdPath, 'utf-8');
       console.log(`✅ Loaded casual prompt from ${claudeMdPath} (${prompt.length} chars)`);
       console.log(`🔍 First 200 chars: ${prompt.substring(0, 200)}`);
-      return prompt;
     } catch (error) {
       console.warn(`⚠️  Could not load CLAUDE.md: ${error.message}`);
-      return 'You are BugBuster 3000, a helpful debugging assistant.';
+      prompt = 'You are BugBuster 3000, a helpful debugging assistant.';
     }
+
+    // Load memory if exists
+    try {
+      if (fs.existsSync(memoryPath)) {
+        const memory = fs.readFileSync(memoryPath, 'utf-8');
+        prompt += `\n\n---\n\n# YOUR MEMORY\n\n${memory}`;
+        console.log(`💾 Loaded memory (${memory.length} chars)`);
+      }
+    } catch (error) {
+      console.warn(`⚠️  Could not load memory: ${error.message}`);
+    }
+
+    return prompt;
   }
 
   /**
@@ -86,10 +108,65 @@ class AgentSDKManager {
   }
 
   /**
-   * Send message using Anthropic API
+   * Send message using Anthropic API with queueing
    * Returns response text
    */
-  async sendMessage(channelId, userMessage) {
+  async sendMessage(channelId, userMessage, channelName = null) {
+    // Store channel name for sending messages
+    if (channelName) {
+      this.channelNames.set(channelId, channelName);
+    }
+    // Check if already processing - add to queue
+    if (this.processingLocks.has(channelId)) {
+      console.log(`⏳ Message queued for channel ${channelId} (already processing)`);
+
+      // Add to queue
+      if (!this.messageQueues.has(channelId)) {
+        this.messageQueues.set(channelId, []);
+      }
+
+      return new Promise((resolve) => {
+        this.messageQueues.get(channelId).push({ userMessage, channelName, resolve });
+      });
+    }
+
+    // Set processing lock
+    this.processingLocks.set(channelId, true);
+
+    try {
+      const response = await this._processMessage(channelId, userMessage);
+
+      // Always release lock after processing current message
+      this.processingLocks.delete(channelId);
+
+      // Process queued messages
+      const queue = this.messageQueues.get(channelId);
+      if (queue && queue.length > 0) {
+        const next = queue.shift();
+        console.log(`📬 Processing next queued message for channel ${channelId} (${queue.length} remaining)`);
+
+        // Process next message asynchronously (will acquire new lock)
+        setImmediate(async () => {
+          try {
+            const nextResponse = await this.sendMessage(channelId, next.userMessage, next.channelName);
+            next.resolve(nextResponse);
+          } catch (error) {
+            next.resolve(`Error: ${error.message}`);
+          }
+        });
+      }
+
+      return response;
+    } catch (error) {
+      this.processingLocks.delete(channelId);
+      throw error;
+    }
+  }
+
+  /**
+   * Internal: Process single message
+   */
+  async _processMessage(channelId, userMessage) {
     console.log(`🤖 Processing message for channel ${channelId}`);
 
     // Get conversation history
@@ -116,14 +193,31 @@ class AgentSDKManager {
 
       // Tool execution loop
       let assistantText = '';
-      const MAX_TOOL_ROUNDS = 5;
+      const MAX_TOOL_ROUNDS = 50;
       let toolRound = 0;
 
       while (toolRound < MAX_TOOL_ROUNDS) {
-        // Extract text from current response
+        // Extract and send text blocks immediately
         for (const block of response.content) {
-          if (block.type === 'text') {
+          if (block.type === 'text' && block.text.trim()) {
             assistantText += block.text;
+
+            // Skip sending if agent wants to stay silent
+            if (block.text.trim() === '[SILENT]') {
+              console.log(`🤫 Agent decided to stay silent (off-topic)`);
+              continue;
+            }
+
+            // Send text block immediately to Cliq
+            const storedChannelName = this.channelNames.get(channelId);
+            if (storedChannelName) {
+              try {
+                await sendViaWebhook(channelId, storedChannelName, block.text.trim());
+                console.log(`📤 Sent text block: ${block.text.substring(0, 50)}...`);
+              } catch (error) {
+                console.error(`❌ Failed to send text block:`, error.message);
+              }
+            }
           }
         }
 
