@@ -29,15 +29,27 @@ jobs:
             if [ ! -d "/root/awkward-cliq-agent" ]; then
               echo "📦 Cloning repository..."
               cd /root
-              git clone https://github.com/alexachks/awkward-cliq-agent.git
+              # Use tarball instead of git clone to avoid auth issues
+              curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                https://api.github.com/repos/alexachks/awkward-cliq-agent/tarball/main \
+                | tar xz
+              mv alexachks-awkward-cliq-agent-* awkward-cliq-agent
             fi
 
             cd /root/awkward-cliq-agent
 
-            # Pull latest changes
+            # Pull latest changes by downloading tarball
             echo "📥 Pulling latest changes..."
-            git fetch origin
-            git reset --hard origin/main
+            cd /root
+            rm -rf /tmp/awkward-cliq-agent-latest
+            curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              https://api.github.com/repos/alexachks/awkward-cliq-agent/tarball/main \
+              | tar xz -C /tmp
+            mv /tmp/alexachks-awkward-cliq-agent-* /tmp/awkward-cliq-agent-latest
+            rsync -av --exclude='node_modules' --exclude='.env' --exclude='agent-memory.md' \
+              /tmp/awkward-cliq-agent-latest/ /root/awkward-cliq-agent/
+            rm -rf /tmp/awkward-cliq-agent-latest
+            cd /root/awkward-cliq-agent
 
             # Install Node.js if not present
             if ! command -v node &> /dev/null; then
