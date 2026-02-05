@@ -200,11 +200,19 @@ class AgentSDKManager {
         // Extract and send text blocks immediately
         for (const block of response.content) {
           if (block.type === 'text' && block.text.trim()) {
+            const trimmedText = block.text.trim();
             assistantText += block.text;
 
             // Skip sending if agent wants to stay silent
-            if (block.text.trim() === '[SILENT]') {
+            // Check if the ENTIRE message is just [SILENT] (case-insensitive, ignore whitespace)
+            if (trimmedText.toUpperCase() === '[SILENT]') {
               console.log(`🤫 Agent decided to stay silent (off-topic)`);
+              continue;
+            }
+
+            // Also check if message CONTAINS [SILENT] marker anywhere
+            if (trimmedText.toUpperCase().includes('[SILENT]')) {
+              console.log(`🤫 Agent message contains [SILENT] marker, skipping send`);
               continue;
             }
 
@@ -212,8 +220,8 @@ class AgentSDKManager {
             const storedChannelName = this.channelNames.get(channelId);
             if (storedChannelName) {
               try {
-                await sendViaWebhook(channelId, storedChannelName, block.text.trim());
-                console.log(`📤 Sent text block: ${block.text.substring(0, 50)}...`);
+                await sendViaWebhook(channelId, storedChannelName, trimmedText);
+                console.log(`📤 Sent text block: ${trimmedText.substring(0, 50)}...`);
               } catch (error) {
                 console.error(`❌ Failed to send text block:`, error.message);
               }
