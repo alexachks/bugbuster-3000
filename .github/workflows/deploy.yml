@@ -31,9 +31,9 @@ jobs:
               cd /root
               # Use tarball instead of git clone to avoid auth issues
               curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                https://api.github.com/repos/alexachks/awkward-cliq-agent/tarball/main \
+                https://api.github.com/repos/alexachks/bugbuster-3000/tarball/main \
                 | tar xz
-              mv alexachks-awkward-cliq-agent-* awkward-cliq-agent
+              mv alexachks-bugbuster-3000-* awkward-cliq-agent
             fi
 
             cd /root/awkward-cliq-agent
@@ -43,9 +43,9 @@ jobs:
             cd /root
             rm -rf /tmp/awkward-cliq-agent-latest
             curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              https://api.github.com/repos/alexachks/awkward-cliq-agent/tarball/main \
+              https://api.github.com/repos/alexachks/bugbuster-3000/tarball/main \
               | tar xz -C /tmp
-            mv /tmp/alexachks-awkward-cliq-agent-* /tmp/awkward-cliq-agent-latest
+            mv /tmp/alexachks-bugbuster-3000-* /tmp/awkward-cliq-agent-latest
             rsync -av --exclude='node_modules' --exclude='.env' --exclude='agent-memory.md' \
               /tmp/awkward-cliq-agent-latest/ /root/awkward-cliq-agent/
             rm -rf /tmp/awkward-cliq-agent-latest
