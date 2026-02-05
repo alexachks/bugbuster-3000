@@ -1,0 +1,121 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to production server
+        run: |
+          ssh -i ~/.ssh/deploy_key root@${{ secrets.DEPLOY_HOST }} << 'EOF'
+            set -e
+
+            # Go to project directory or clone if doesn't exist
+            if [ ! -d "/root/awkward-cliq-agent" ]; then
+              echo "📦 Cloning repository..."
+              cd /root
+              git clone https://github.com/alexachks/awkward-cliq-agent.git
+            fi
+
+            cd /root/awkward-cliq-agent
+
+            # Pull latest changes
+            echo "📥 Pulling latest changes..."
+            git fetch origin
+            git reset --hard origin/main
+
+            # Install Node.js if not present
+            if ! command -v node &> /dev/null; then
+              echo "📦 Installing Node.js..."
+              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+              apt-get install -y nodejs
+            fi
+
+            # Install dependencies
+            echo "📦 Installing dependencies..."
+            npm ci --production
+
+            # Create .env file from secrets
+            echo "⚙️  Creating .env file..."
+            cat > .env << 'ENVEOF'
+          ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+
+          CLIQ_BOT_WEBHOOK_URL=${{ secrets.CLIQ_BOT_WEBHOOK_URL }}
+          CLIQ_BOT_NAME=${{ secrets.CLIQ_BOT_NAME }}
+
+          CLIQ_ACCESS_TOKEN=${{ secrets.CLIQ_ACCESS_TOKEN }}
+          CLIQ_REFRESH_TOKEN=${{ secrets.CLIQ_REFRESH_TOKEN }}
+          CLIQ_CLIENT_ID=${{ secrets.CLIQ_CLIENT_ID }}
+          CLIQ_CLIENT_SECRET=${{ secrets.CLIQ_CLIENT_SECRET }}
+
+          JIRA_BASE_URL=${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL=${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN=${{ secrets.JIRA_API_TOKEN }}
+          JIRA_PROJECT_KEY=${{ secrets.JIRA_PROJECT_KEY }}
+
+          PORT=3002
+          NODE_ENV=production
+
+          SERVER_SUPABASE_HOST=${{ secrets.SERVER_SUPABASE_HOST }}
+          SERVER_SUPABASE_USER=${{ secrets.SERVER_SUPABASE_USER }}
+          SERVER_SUPABASE_PASSWORD=${{ secrets.SERVER_SUPABASE_PASSWORD }}
+
+          SERVER_AWKWARD_HOST=${{ secrets.SERVER_AWKWARD_HOST }}
+          SERVER_AWKWARD_USER=${{ secrets.SERVER_AWKWARD_USER }}
+          SERVER_AWKWARD_PASSWORD=${{ secrets.SERVER_AWKWARD_PASSWORD }}
+
+          SERVER_SEOENGINE_HOST=${{ secrets.SERVER_SEOENGINE_HOST }}
+          SERVER_SEOENGINE_USER=${{ secrets.SERVER_SEOENGINE_USER }}
+          SERVER_SEOENGINE_PASSWORD=${{ secrets.SERVER_SEOENGINE_PASSWORD }}
+          ENVEOF
+
+            # Install PM2 if not present
+            if ! command -v pm2 &> /dev/null; then
+              echo "📦 Installing PM2..."
+              npm install -g pm2
+            fi
+
+            # Restart or start app with PM2
+            echo "🔄 Restarting application..."
+            pm2 delete awkward-cliq-agent 2>/dev/null || true
+            pm2 start npm --name "awkward-cliq-agent" -- start
+            pm2 save
+
+            # Setup PM2 to start on boot
+            pm2 startup systemd -u root --hp /root 2>/dev/null || true
+
+            echo "✅ Deployment complete!"
+            pm2 status
+          EOF
+
+      - name: Verify deployment
+        run: |
+          echo "⏳ Waiting for service to start..."
+          sleep 10
+
+          ssh -i ~/.ssh/deploy_key root@${{ secrets.DEPLOY_HOST }} << 'EOF'
+            # Check if app is running
+            if pm2 list | grep -q "awkward-cliq-agent.*online"; then
+              echo "✅ Application is running"
+              pm2 logs awkward-cliq-agent --lines 20 --nostream
+            else
+              echo "❌ Application failed to start"
+              pm2 logs awkward-cliq-agent --lines 50 --nostream
+              exit 1
+            fi
+          EOF
