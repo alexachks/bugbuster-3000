@@ -55,13 +55,18 @@ app.use((req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🤖 AI Agent running on port ${PORT}`);
+  console.log(`🤖 BugBuster 3000 AI Agent running on port ${PORT}`);
   console.log(`🩺 Health check: http://localhost:${PORT}/health`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔧 Claude API: ${process.env.ANTHROPIC_API_KEY ? '✓ Configured' : '✗ Missing'}`);
-  console.log(`🔧 Cliq: ${process.env.CLIQ_API_TOKEN ? '✓ Configured' : '✗ Missing'}`);
-  console.log(`🔧 Jira: ${process.env.JIRA_API_TOKEN ? '✓ Configured' : '✗ Missing'}`);
-  console.log(`🔧 GitHub: ${process.env.GITHUB_TOKEN ? '✓ Configured' : '✗ Missing'}`);
+  console.log(`\n🔧 Configuration:`);
+  console.log(`   - Claude SDK: ${process.env.ANTHROPIC_API_KEY ? '✓ Configured' : '✗ Missing'}`);
+  console.log(`   - Cliq Webhook: ${process.env.CLIQ_BOT_WEBHOOK_URL ? '✓ Configured' : '✗ Missing'}`);
+  console.log(`   - Jira: ${process.env.JIRA_API_TOKEN ? '✓ Configured' : '✗ Missing'}`);
+  console.log(`   - Repository: ${process.env.REPO_CLONE_PATH || '/tmp/repo'}`);
+  console.log(`\n📍 Endpoints:`);
+  console.log(`   - POST /webhook/cliq/participate - Cliq participation handler`);
+  console.log(`   - GET  /webhook/cliq/health - Cliq integration health`);
+  console.log(`   - GET  /health - Service health`);
 });
 
 // Graceful shutdown
