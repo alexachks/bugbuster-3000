@@ -4,31 +4,58 @@
  */
 
 import express from 'express';
-import { agentManager } from '../services/agent-sdk-manager.js';
+import { agentManager } from '../services/bugbuster-manager.js';
 
 const router = express.Router();
 
 /**
- * Helper: Send message via Cliq Incoming Webhook
+ * Format channel name to Cliq unique name
+ * Example: "#test agent" -> "testagent"
+ * Example: "#RANQT - Bugs/Issues/Suggestions" -> "ranqtbugsissuessuggestions"
  */
-async function sendViaWebhook(channelId, text) {
-  const webhookUrl = process.env.CLIQ_BOT_WEBHOOK_URL;
+function formatChannelUniqueName(channelName) {
+  let uniqueName = channelName;
 
-  if (!webhookUrl) {
-    console.error('❌ CLIQ_BOT_WEBHOOK_URL not configured');
-    return;
+  // Remove # if present
+  if (uniqueName.startsWith('#')) {
+    uniqueName = uniqueName.substring(1);
   }
 
+  // Remove all non-alphanumeric characters (keep only letters and numbers)
+  uniqueName = uniqueName.replace(/[^a-zA-Z0-9]/g, '');
+
+  // Convert to lowercase
+  uniqueName = uniqueName.toLowerCase();
+
+  console.log(`📝 Formatted channel name: "${channelName}" -> "${uniqueName}"`);
+
+  return uniqueName;
+}
+
+/**
+ * Helper: Send message to Cliq channel via Incoming Webhook
+ * The webhook handler (Deluge) will post to channel using zoho.cliq.postToChannelAsBot()
+ */
+async function sendViaWebhook(channelId, channelName, text) {
   try {
+    console.log(`📤 Sending to channel: ${channelName} (${channelId})`);
+
+    const webhookUrl = process.env.CLIQ_BOT_WEBHOOK_URL;
+
+    // Format channel name to unique name (remove # and special chars)
+    const uniqueName = formatChannelUniqueName(channelName);
+
+    // Send payload with pre-formatted unique name
+    // Deluge just needs to call: zoho.cliq.postToChannelAsBot(uniqueName, "bugbuster", textMessage)
+    const payload = {
+      text,
+      channel_unique_name: uniqueName
+    };
+
     const response = await fetch(webhookUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        text,
-        channel_id: channelId
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
@@ -37,11 +64,10 @@ async function sendViaWebhook(channelId, text) {
       throw new Error(`Webhook failed: ${response.status}`);
     }
 
-    const result = await response.json();
-    console.log(`✅ Sent message via webhook to channel ${channelId}`);
-    return result;
+    console.log(`✅ Sent message to channel ${uniqueName}`);
+    return await response.json();
   } catch (error) {
-    console.error('❌ Failed to send via webhook:', error);
+    console.error('❌ Failed to send message:', error);
     throw error;
   }
 }
@@ -52,6 +78,8 @@ async function sendViaWebhook(channelId, text) {
  */
 router.post('/participate', express.urlencoded({ extended: true }), express.json(), async (req, res) => {
   try {
+    console.log(`\n📥 Raw body:`, JSON.stringify(req.body, null, 2));
+
     const { message, user_name, channel_id, channel_name } = req.body;
 
     console.log(`\n📨 Participation: ${user_name} in ${channel_name}`);
@@ -86,74 +114,45 @@ router.post('/participate', express.urlencoded({ extended: true }), express.json
 });
 
 /**
- * Process message with Agent SDK V2
- * Streams responses to Cliq via webhook
+ * Process message with Anthropic API
+ * Sends response to Cliq via webhook
  */
 async function processWithAgentSDK(data) {
-  const { channelId, userName, message } = data;
+  const { channelId, channelName, userName, message } = data;
 
   try {
-    console.log(`🤖 Starting Agent SDK processing for channel ${channelId}`);
+    console.log(`🤖 Starting processing for channel ${channelId}`);
 
-    // Get or create persistent session for this channel
-    const session = await agentManager.getOrCreateSession(channelId);
-
-    // Send user message to agent
     // Format: "UserName: message" so agent knows who's talking
-    await session.send(`${userName}: ${message}`);
+    const formattedMessage = `${userName}: ${message}`;
 
-    console.log(`📤 Sent message to Agent SDK, waiting for response...`);
+    // Get response from agent
+    const response = await agentManager.sendMessage(channelId, formattedMessage);
 
-    // Stream responses from agent
-    for await (const msg of session.stream()) {
-      // Handle assistant messages (agent responses)
-      if (msg.type === 'assistant') {
-        const textBlocks = msg.message.content.filter(block => block.type === 'text');
-
-        for (const block of textBlocks) {
-          const text = block.text?.trim();
-          if (text) {
-            console.log(`📨 Agent response: ${text.substring(0, 100)}...`);
-            await sendViaWebhook(channelId, text);
-          }
-        }
-      }
-
-      // Handle result (final outcome)
-      if (msg.type === 'result') {
-        if (msg.subtype === 'success') {
-          console.log(`✅ Agent completed successfully`);
-          console.log(`   - Turns: ${msg.num_turns}`);
-          console.log(`   - Cost: $${msg.total_cost_usd.toFixed(4)}`);
-          console.log(`   - Duration: ${(msg.duration_ms / 1000).toFixed(2)}s`);
-        } else {
-          console.error(`❌ Agent finished with error: ${msg.subtype}`);
-          if (msg.errors && msg.errors.length > 0) {
-            console.error(`   Errors:`, msg.errors);
-          }
-        }
-      }
-
-      // Handle errors
-      if (msg.type === 'error') {
-        console.error(`❌ Agent error:`, msg);
-        await sendViaWebhook(
-          channelId,
-          `❌ oops, ran into an issue. check the logs`
-        );
-      }
+    // Check if agent wants to stay silent
+    if (response && response.trim() === '[SILENT]') {
+      console.log(`🤫 Agent decided to stay silent (off-topic conversation)`);
+      return; // Don't send anything to Cliq
     }
 
-    console.log(`✅ Finished processing for channel ${channelId}`);
+    // Send to Cliq
+    if (response && response.trim()) {
+      console.log(`📨 Sending response: ${response.substring(0, 100)}...`);
+      await sendViaWebhook(channelId, channelName, response);
+    }
+
+    const stats = agentManager.getSessionStats(channelId);
+    console.log(`✅ Finished - Session total: $${stats.totalCost.toFixed(4)} (${stats.messageCount} messages)`);
 
   } catch (error) {
-    console.error('❌ Agent SDK processing failed:', error);
+    console.error('❌ Processing failed:', error);
 
     // Send error message to Cliq
     try {
       await sendViaWebhook(
         channelId,
-        `❌ something went wrong: ${error.message}`
+        channelName,
+        `ugh something broke: ${error.message}`
       );
     } catch (webhookError) {
       console.error('❌ Failed to send error message via webhook:', webhookError);
@@ -162,17 +161,44 @@ async function processWithAgentSDK(data) {
 }
 
 /**
+ * Reset session for a channel (for testing/debugging)
+ */
+router.post('/reset-session/:channelId', (req, res) => {
+  const { channelId } = req.params;
+
+  agentManager.closeSession(channelId);
+
+  res.json({
+    success: true,
+    message: `Session reset for channel ${channelId}`
+  });
+});
+
+/**
  * Health check for Cliq integration
  */
 router.get('/health', (req, res) => {
   const activeChannels = agentManager.getActiveChannels();
+
+  // Get stats for all active sessions
+  const channelStats = {};
+  for (const channelId of activeChannels) {
+    const stats = agentManager.getSessionStats(channelId);
+    channelStats[channelId] = {
+      total_cost: stats.totalCost,
+      message_count: stats.messageCount,
+      created_at: stats.createdAt,
+      last_activity_at: stats.lastActivityAt
+    };
+  }
 
   res.json({
     status: 'healthy',
     service: 'Cliq Integration',
     agent_sdk: {
       active_sessions: agentManager.getActiveSessionCount(),
-      channels: activeChannels
+      channels: activeChannels,
+      session_stats: channelStats
     },
     webhook_configured: !!process.env.CLIQ_BOT_WEBHOOK_URL
   });
