@@ -84,16 +84,50 @@ router.post('/participate', express.urlencoded({ extended: true }), express.json
     console.log(`📥 Body:`, JSON.stringify(req.body, null, 2));
     console.log(`📥 ==========================================\n`);
 
-    const { message, user_name, channel_id, channel_name } = req.body;
+    const { message_object, user_name, channel_id, channel_name } = req.body;
+
+    // Parse message object if it's a string
+    let messageData;
+    if (typeof message_object === 'string') {
+      try {
+        messageData = JSON.parse(message_object);
+      } catch (e) {
+        messageData = {};
+      }
+    } else {
+      messageData = message_object || {};
+    }
+
+    // Extract text from different possible fields
+    const messageText = messageData.text || messageData.comment || '';
+
+    // Extract attachments
+    const attachments = [];
+    if (messageData.file) {
+      attachments.push({
+        type: messageData.file.type || 'file',
+        name: messageData.file.name,
+        url: messageData.file.url
+      });
+    }
 
     console.log(`\n📨 Participation: ${user_name} in ${channel_name}`);
-    console.log(`Message: ${message?.substring(0, 100)}...`);
+    console.log(`Message: ${messageText.substring(0, 100)}...`);
+    console.log(`Attachments: ${attachments.length}`);
 
     // Validate required fields
-    if (!message || !user_name || !channel_id) {
+    if (!user_name || !channel_id) {
       return res.status(400).json({
         should_respond: false,
         error: 'Missing required fields'
+      });
+    }
+
+    // Skip if no text and no attachments
+    if (!messageText && attachments.length === 0) {
+      return res.status(400).json({
+        should_respond: false,
+        error: 'No message content'
       });
     }
 
@@ -105,7 +139,8 @@ router.post('/participate', express.urlencoded({ extended: true }), express.json
       channelId: channel_id,
       channelName: channel_name,
       userName: user_name,
-      message
+      message: messageText,
+      attachments: attachments
     });
 
   } catch (error) {
@@ -122,13 +157,20 @@ router.post('/participate', express.urlencoded({ extended: true }), express.json
  * Sends response to Cliq via webhook
  */
 async function processWithAgentSDK(data) {
-  const { channelId, channelName, userName, message } = data;
+  const { channelId, channelName, userName, message, attachments } = data;
 
   try {
     console.log(`🤖 Starting processing for channel ${channelId}`);
 
-    // Format: "UserName: message" so agent knows who's talking
-    const formattedMessage = `${userName}: ${message}`;
+    // Format message with attachments info
+    let formattedMessage = `${userName}: ${message}`;
+
+    if (attachments && attachments.length > 0) {
+      formattedMessage += '\n\nAttachments:';
+      for (const attachment of attachments) {
+        formattedMessage += `\n- ${attachment.name} (${attachment.type}): ${attachment.url}`;
+      }
+    }
 
     // Get response from agent (messages sent in real-time during processing)
     const response = await agentManager.sendMessage(channelId, formattedMessage, channelName);
