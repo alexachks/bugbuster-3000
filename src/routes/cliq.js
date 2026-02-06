@@ -206,7 +206,7 @@ async function processWithAgentSDK(data) {
                 data: base64Data
               }
             });
-            console.log(`✅ Added image to message: ${attachment.name}`);
+            console.log(`✅ Added image to message: ${attachment.name} (${Math.round(base64Data.length / 1024)}KB)`);
           }
         } else {
           // For non-image attachments, add as text
