@@ -176,12 +176,17 @@ class AgentSDKManager {
 
     // Add user message to history
     // If messageContent provided (with images), use that, otherwise use plain text
+    const contentToAdd = messageContent || userMessage;
     history.push({
       role: 'user',
-      content: messageContent || userMessage
+      content: contentToAdd
     });
 
     console.log(`📝 History length: ${history.length} messages`);
+    console.log(`📤 Content type: ${Array.isArray(contentToAdd) ? 'multimodal' : 'text'}`);
+    if (Array.isArray(contentToAdd)) {
+      console.log(`📤 Content blocks: ${contentToAdd.length} (${contentToAdd.map(b => b.type).join(', ')})`);
+    }
     console.log(`📤 Sending to Anthropic API with ${history.length} messages`);
 
     try {
