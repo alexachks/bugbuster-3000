@@ -110,8 +110,9 @@ class AgentSDKManager {
   /**
    * Send message using Anthropic API with queueing
    * Returns response text
+   * @param {Array} messageContent - Optional content blocks (text + images)
    */
-  async sendMessage(channelId, userMessage, channelName = null) {
+  async sendMessage(channelId, userMessage, channelName = null, messageContent = null) {
     // Store channel name for sending messages
     if (channelName) {
       this.channelNames.set(channelId, channelName);
@@ -126,7 +127,7 @@ class AgentSDKManager {
       }
 
       return new Promise((resolve) => {
-        this.messageQueues.get(channelId).push({ userMessage, channelName, resolve });
+        this.messageQueues.get(channelId).push({ userMessage, channelName, messageContent, resolve });
       });
     }
 
@@ -134,7 +135,7 @@ class AgentSDKManager {
     this.processingLocks.set(channelId, true);
 
     try {
-      const response = await this._processMessage(channelId, userMessage);
+      const response = await this._processMessage(channelId, userMessage, messageContent);
 
       // Always release lock after processing current message
       this.processingLocks.delete(channelId);
@@ -148,7 +149,7 @@ class AgentSDKManager {
         // Process next message asynchronously (will acquire new lock)
         setImmediate(async () => {
           try {
-            const nextResponse = await this.sendMessage(channelId, next.userMessage, next.channelName);
+            const nextResponse = await this.sendMessage(channelId, next.userMessage, next.channelName, next.messageContent);
             next.resolve(nextResponse);
           } catch (error) {
             next.resolve(`Error: ${error.message}`);
@@ -165,17 +166,19 @@ class AgentSDKManager {
 
   /**
    * Internal: Process single message
+   * @param {Array} messageContent - Optional content blocks (text + images)
    */
-  async _processMessage(channelId, userMessage) {
+  async _processMessage(channelId, userMessage, messageContent = null) {
     console.log(`🤖 Processing message for channel ${channelId}`);
 
     // Get conversation history
     const history = this.getOrInitHistory(channelId);
 
     // Add user message to history
+    // If messageContent provided (with images), use that, otherwise use plain text
     history.push({
       role: 'user',
-      content: userMessage
+      content: messageContent || userMessage
     });
 
     console.log(`📝 History length: ${history.length} messages`);

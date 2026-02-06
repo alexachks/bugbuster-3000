@@ -153,6 +153,23 @@ router.post('/participate', express.urlencoded({ extended: true }), express.json
 });
 
 /**
+ * Download image and convert to base64
+ */
+async function downloadImageAsBase64(url) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to download image: ${response.status}`);
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    return buffer.toString('base64');
+  } catch (error) {
+    console.error(`❌ Failed to download image from ${url}:`, error.message);
+    return null;
+  }
+}
+
+/**
  * Process message with Anthropic API
  * Sends response to Cliq via webhook
  */
@@ -162,18 +179,51 @@ async function processWithAgentSDK(data) {
   try {
     console.log(`🤖 Starting processing for channel ${channelId}`);
 
-    // Format message with attachments info
-    let formattedMessage = `${userName}: ${message}`;
+    // Prepare message content with images
+    let messageContent = [];
 
+    // Add text
+    if (message) {
+      messageContent.push({
+        type: 'text',
+        text: message
+      });
+    }
+
+    // Add images
     if (attachments && attachments.length > 0) {
-      formattedMessage += '\n\nAttachments:';
       for (const attachment of attachments) {
-        formattedMessage += `\n- ${attachment.name} (${attachment.type}): ${attachment.url}`;
+        // Check if it's an image
+        if (attachment.type && attachment.type.startsWith('image/')) {
+          console.log(`📷 Downloading image: ${attachment.name}`);
+          const base64Data = await downloadImageAsBase64(attachment.url);
+
+          if (base64Data) {
+            messageContent.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: attachment.type,
+                data: base64Data
+              }
+            });
+            console.log(`✅ Added image to message: ${attachment.name}`);
+          }
+        } else {
+          // For non-image attachments, add as text
+          messageContent.push({
+            type: 'text',
+            text: `\nAttachment: ${attachment.name} (${attachment.type}): ${attachment.url}`
+          });
+        }
       }
     }
 
+    // Format with username
+    const formattedMessage = `${userName}: ` + (message || '[sent an image]');
+
     // Get response from agent (messages sent in real-time during processing)
-    const response = await agentManager.sendMessage(channelId, formattedMessage, channelName);
+    const response = await agentManager.sendMessage(channelId, formattedMessage, channelName, messageContent);
 
     // Check if agent wants to stay silent
     if (response && response.trim() === '[SILENT]') {
