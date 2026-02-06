@@ -78,7 +78,11 @@ export async function sendViaWebhook(channelId, channelName, text) {
  */
 router.post('/participate', express.urlencoded({ extended: true }), express.json(), async (req, res) => {
   try {
-    console.log(`\n📥 Raw body:`, JSON.stringify(req.body, null, 2));
+    console.log(`\n📥 ========== FULL REQUEST DEBUG ==========`);
+    console.log(`📥 Headers:`, JSON.stringify(req.headers, null, 2));
+    console.log(`📥 Query:`, JSON.stringify(req.query, null, 2));
+    console.log(`📥 Body:`, JSON.stringify(req.body, null, 2));
+    console.log(`📥 ==========================================\n`);
 
     const { message, user_name, channel_id, channel_name } = req.body;
 
