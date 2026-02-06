@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  bugbuster:
+    build: .
+    container_name: bugbuster
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    env_file:
+      - .env
+    volumes:
+      # Persist agent memory across restarts
+      - ./agent-memory.md:/app/agent-memory.md
+      # Mount .claude directory for system prompt
+      - ./.claude:/app/.claude:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

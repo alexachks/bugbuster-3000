@@ -51,20 +51,10 @@ jobs:
             rm -rf /tmp/bugbuster-latest
             cd /root/awkward-cliq-agent
 
-            # Install Node.js if not present
-            if ! command -v node &> /dev/null; then
-              echo "📦 Installing Node.js..."
-              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-              apt-get install -y nodejs
-            fi
-
-            # Install dependencies
-            echo "📦 Installing dependencies..."
-            npm ci --production
-
-            # Create .env file from secrets
-            echo "⚙️  Creating .env file..."
-            cat > .env << 'ENVEOF'
+            # Create .env file from secrets if it doesn't exist
+            if [ ! -f .env ]; then
+              echo "⚙️  Creating .env file..."
+              cat > .env << 'ENVEOF'
           ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
 
           CLIQ_BOT_WEBHOOK_URL=${{ secrets.CLIQ_BOT_WEBHOOK_URL }}
@@ -95,39 +85,45 @@ jobs:
           SERVER_SEOENGINE_USER=${{ secrets.SERVER_SEOENGINE_USER }}
           SERVER_SEOENGINE_PASSWORD="${{ secrets.SERVER_SEOENGINE_PASSWORD }}"
           ENVEOF
-
-            # Install PM2 if not present
-            if ! command -v pm2 &> /dev/null; then
-              echo "📦 Installing PM2..."
-              npm install -g pm2
             fi
 
-            # Restart or start app with PM2
-            echo "🔄 Restarting application..."
-            pm2 delete awkward-cliq-agent 2>/dev/null || true
-            pm2 start npm --name "awkward-cliq-agent" -- start
-            pm2 save
+            # Create agent-memory.md if it doesn't exist
+            if [ ! -f agent-memory.md ]; then
+              echo "📝 Creating agent-memory.md..."
+              touch agent-memory.md
+            fi
 
-            # Setup PM2 to start on boot
-            pm2 startup systemd -u root --hp /root 2>/dev/null || true
+            # Stop and remove old PM2 processes
+            echo "🛑 Stopping PM2 processes..."
+            pm2 delete all 2>/dev/null || true
+
+            # Stop and remove existing Docker container
+            echo "🛑 Stopping existing container..."
+            docker-compose down 2>/dev/null || true
+
+            # Build and start with Docker Compose
+            echo "🐳 Building and starting Docker container..."
+            docker-compose up -d --build
 
             echo "✅ Deployment complete!"
-            pm2 status
+            docker-compose ps
           EOF
 
       - name: Verify deployment
         run: |
           echo "⏳ Waiting for service to start..."
-          sleep 10
+          sleep 15
 
           ssh -i ~/.ssh/deploy_key root@${{ secrets.DEPLOY_HOST }} << 'EOF'
-            # Check if app is running
-            if pm2 list | grep -q "awkward-cliq-agent.*online"; then
-              echo "✅ Application is running"
-              pm2 logs awkward-cliq-agent --lines 20 --nostream
+            cd /root/awkward-cliq-agent
+
+            # Check if container is running
+            if docker-compose ps | grep -q "bugbuster.*Up"; then
+              echo "✅ Container is running"
+              docker-compose logs --tail=30
             else
-              echo "❌ Application failed to start"
-              pm2 logs awkward-cliq-agent --lines 50 --nostream
+              echo "❌ Container failed to start"
+              docker-compose logs --tail=100
               exit 1
             fi
           EOF

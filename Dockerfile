@@ -16,6 +16,9 @@ RUN npm ci --only=production
 # Copy source code
 COPY src/ ./src/
 
+# Copy system prompt (will be overridden by volume mount in production)
+COPY .claude/ ./.claude/
+
 # Create directory for repository clones
 RUN mkdir -p /tmp/repo-clone
 
