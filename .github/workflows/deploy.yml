@@ -97,6 +97,13 @@ jobs:
             echo "🛑 Stopping PM2 processes..."
             pm2 delete all 2>/dev/null || true
 
+            # Install Docker Compose if not present
+            if ! command -v docker-compose &> /dev/null; then
+              echo "📦 Installing Docker Compose..."
+              curl -L "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              chmod +x /usr/local/bin/docker-compose
+            fi
+
             # Stop and remove existing Docker container
             echo "🛑 Stopping existing container..."
             docker-compose down 2>/dev/null || true
