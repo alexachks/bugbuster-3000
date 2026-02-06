@@ -182,13 +182,12 @@ async function processWithAgentSDK(data) {
     // Prepare message content with images
     let messageContent = [];
 
-    // Add text
-    if (message) {
-      messageContent.push({
-        type: 'text',
-        text: message
-      });
-    }
+    // Add text with username
+    const textMessage = `${userName}: ${message || '[sent an image]'}`;
+    messageContent.push({
+      type: 'text',
+      text: textMessage
+    });
 
     // Add images
     if (attachments && attachments.length > 0) {
@@ -219,11 +218,8 @@ async function processWithAgentSDK(data) {
       }
     }
 
-    // Format with username
-    const formattedMessage = `${userName}: ` + (message || '[sent an image]');
-
     // Get response from agent (messages sent in real-time during processing)
-    const response = await agentManager.sendMessage(channelId, formattedMessage, channelName, messageContent);
+    const response = await agentManager.sendMessage(channelId, textMessage, channelName, messageContent);
 
     // Check if agent wants to stay silent
     if (response && response.trim() === '[SILENT]') {
