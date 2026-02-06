@@ -2,3 +2,12 @@ node_modules/
 .env
 *.log
 .DS_Store
+
+# Test files and temporary scripts
+test-*.js
+generate-*.js
+bulk-*.js
+messages.md
+
+# Local development
+.claude/settings.local.json
