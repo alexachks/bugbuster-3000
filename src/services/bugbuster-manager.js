@@ -183,9 +183,9 @@ class AgentSDKManager {
       content: contentToAdd
     });
 
-    // Check if this is a Google Meet channel (starts with "test_" or contains "[Google Meet]")
-    const isGoogleMeet = channelId.startsWith('test_') ||
-                        (typeof userMessage === 'string' && userMessage.includes('[Google Meet]'));
+    // Check if this channel is currently in a Google Meet
+    // Only use Google Meet mode if bot is ACTUALLY in a meeting, not just when user sends a meet link
+    const isGoogleMeet = meetBotManager.isChannelInMeeting(channelId);
 
     console.log(`📝 History length: ${history.length} messages`);
     console.log(`📤 Content type: ${Array.isArray(contentToAdd) ? 'multimodal' : 'text'}`);
