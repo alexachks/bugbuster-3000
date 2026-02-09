@@ -7,7 +7,6 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
-import fetch from 'node-fetch';
 import fs from 'fs/promises';
 
 dotenv.config();

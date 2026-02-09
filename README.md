@@ -111,36 +111,37 @@ docker-compose logs -f
 Create `.env` file:
 
 ```bash
-# === Required ===
+# === REQUIRED ===
 
-# Anthropic API
+# Claude API
 ANTHROPIC_API_KEY=sk-ant-xxx
 
-# Cliq Webhook (for sending messages)
-CLIQ_BOT_WEBHOOK_URL=https://cliq.zoho.com/api/v2/channelsbyname/YOUR_CHANNEL/message?zapikey=xxx
+# Cliq Integration
+# Bot webhook URL - для отправки сообщений в Cliq
+CLIQ_BOT_WEBHOOK_URL=https://cliq.zoho.com/api/v2/bots/bugbuster/incoming?zapikey=xxx
 
-# Jira
+# Jira Integration
 JIRA_BASE_URL=https://your-domain.atlassian.net
 JIRA_EMAIL=your-email@example.com
 JIRA_API_TOKEN=your_jira_api_token
-JIRA_PROJECT_KEY=PROJ
+JIRA_PROJECT_KEY=AM
 
+# === OPTIONAL ===
 
-# === Optional ===
-
-# Cliq OAuth (for bulk ticket creation from chat history)
-CLIQ_CLIENT_ID=1000.XXX
-CLIQ_CLIENT_SECRET=xxx
-CLIQ_REFRESH_TOKEN=1000.xxx
-
-# SSH Servers (for log checking)
-SERVER_SUPABASE_HOST=xxx.xxx.xxx.xxx
-SERVER_SUPABASE_USER=root
-SERVER_SUPABASE_PASSWORD="password"
-
-# Server
+# Server Configuration
 PORT=3002
 NODE_ENV=production
+
+# Remote Servers (SSH access for diagnostics)
+# Format: SERVER_<NAME>_<PROPERTY>
+SERVER_SUPABASE_HOST=xxx.xxx.xxx.xxx
+SERVER_SUPABASE_USER=root
+SERVER_SUPABASE_PASSWORD=your_password
+
+# Add more servers as needed:
+# SERVER_PRODUCTION_HOST=prod.example.com
+# SERVER_PRODUCTION_USER=admin
+# SERVER_PRODUCTION_PASSWORD=your_password
 ```
 
 ### 2. Zoho Cliq Bot Setup
