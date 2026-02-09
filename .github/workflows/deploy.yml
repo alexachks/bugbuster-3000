@@ -84,6 +84,10 @@ jobs:
           SERVER_SEOENGINE_HOST=${{ secrets.SERVER_SEOENGINE_HOST }}
           SERVER_SEOENGINE_USER=${{ secrets.SERVER_SEOENGINE_USER }}
           SERVER_SEOENGINE_PASSWORD="${{ secrets.SERVER_SEOENGINE_PASSWORD }}"
+
+          RECALL_AI_API_KEY=${{ secrets.RECALL_AI_API_KEY }}
+          RECALL_WEBHOOK_SECRET=${{ secrets.RECALL_WEBHOOK_SECRET }}
+          BOT_UI_URL=${{ secrets.BOT_UI_URL }}
           ENVEOF
             fi
 
