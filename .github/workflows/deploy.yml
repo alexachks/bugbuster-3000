@@ -51,10 +51,9 @@ jobs:
             rm -rf /tmp/bugbuster-latest
             cd /root/awkward-cliq-agent
 
-            # Create .env file from secrets if it doesn't exist
-            if [ ! -f .env ]; then
-              echo "⚙️  Creating .env file..."
-              cat > .env << 'ENVEOF'
+            # Create/update .env file from secrets
+            echo "⚙️  Updating .env file..."
+            cat > .env << 'ENVEOF'
           ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
 
           CLIQ_BOT_WEBHOOK_URL=${{ secrets.CLIQ_BOT_WEBHOOK_URL }}
@@ -89,7 +88,6 @@ jobs:
           RECALL_WEBHOOK_SECRET=${{ secrets.RECALL_WEBHOOK_SECRET }}
           BOT_UI_URL=${{ secrets.BOT_UI_URL }}
           ENVEOF
-            fi
 
             # Create agent-memory.md if it doesn't exist
             if [ ! -f agent-memory.md ]; then
