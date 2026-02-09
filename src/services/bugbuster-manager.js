@@ -6,6 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { tools, executeTool } from '../tools/index.js';
 import { sendViaWebhook } from '../routes/cliq.js';
+import { meetBotManager } from './meet-bot-manager.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -266,14 +267,23 @@ REMEMBER: You're a participant in a meeting, not leading it. Speak only when nee
               continue;
             }
 
-            // Send text block immediately to Cliq
+            // Send text block immediately to Cliq (unless channel is in a Google Meet)
             const storedChannelName = this.channelNames.get(channelId);
             if (storedChannelName) {
-              try {
-                await sendViaWebhook(channelId, storedChannelName, trimmedText);
-                console.log(`📤 Sent text block: ${trimmedText.substring(0, 50)}...`);
-              } catch (error) {
-                console.error(`❌ Failed to send text block:`, error.message);
+              // Check if this channel is currently in a Google Meet
+              const isInMeeting = meetBotManager.isChannelInMeeting(channelId);
+
+              if (isInMeeting) {
+                console.log(`🎥 Channel is in Google Meet - message will be sent to meeting chat instead of Cliq`);
+                // Message will be sent to Google Meet chat by meet.js route handler
+              } else {
+                // Send to Cliq
+                try {
+                  await sendViaWebhook(channelId, storedChannelName, trimmedText);
+                  console.log(`📤 Sent text block: ${trimmedText.substring(0, 50)}...`);
+                } catch (error) {
+                  console.error(`❌ Failed to send text block:`, error.message);
+                }
               }
             }
           }

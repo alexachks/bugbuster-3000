@@ -95,6 +95,13 @@ class MeetBotManager {
   }
 
   /**
+   * Check if channel is currently in a meeting
+   */
+  isChannelInMeeting(channelId) {
+    return this.getBotByChannelId(channelId) !== null;
+  }
+
+  /**
    * Update bot status
    */
   updateBotStatus(botId, status) {
