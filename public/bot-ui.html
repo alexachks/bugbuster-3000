@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BugBuster 3000 - Meet Bot</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    .container {
+      text-align: center;
+      color: white;
+    }
+
+    .avatar {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      margin: 0 auto 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .avatar.speaking {
+      animation: pulse 1s ease-in-out infinite;
+      box-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    h1 {
+      font-size: 24px;
+      margin: 0 0 10px;
+      font-weight: 600;
+    }
+
+    .status {
+      font-size: 14px;
+      opacity: 0.8;
+    }
+
+    #audioElement {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="avatar" id="avatar">🤖</div>
+    <h1>BugBuster 3000</h1>
+    <div class="status" id="status">Connected</div>
+  </div>
+
+  <audio id="audioElement" autoplay></audio>
+
+  <script>
+    // Get botId from URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    const botId = urlParams.get('botId');
+
+    console.log('Bot UI loaded for botId:', botId);
+
+    const avatar = document.getElementById('avatar');
+    const status = document.getElementById('status');
+    const audioElement = document.getElementById('audioElement');
+
+    let ws = null;
+
+    // Connect to WebSocket for audio streaming
+    function connectWebSocket() {
+      if (!botId) {
+        status.textContent = 'Error: No bot ID';
+        return;
+      }
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/audio-stream?botId=${botId}`;
+
+      console.log('Connecting to WebSocket:', wsUrl);
+      status.textContent = 'Connecting...';
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log('✅ WebSocket connected');
+        status.textContent = 'Ready';
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          console.log('📨 Message:', message.type);
+
+          switch (message.type) {
+            case 'ready':
+              console.log('✅ Audio stream ready');
+              break;
+
+            case 'audio':
+              // Play audio from data URI
+              playAudio(message.data);
+              break;
+
+            case 'stream_start':
+              console.log('🎤 Stream start:', message.text);
+              status.textContent = 'Receiving audio...';
+              break;
+
+            case 'stream_chunk':
+              console.log('📦 Audio chunk received');
+              break;
+
+            case 'stream_end':
+              console.log('✅ Stream complete');
+              status.textContent = 'Ready';
+              break;
+          }
+        } catch (error) {
+          console.error('❌ Failed to parse message:', error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('❌ WebSocket error:', error);
+        status.textContent = 'Connection error';
+      };
+
+      ws.onclose = () => {
+        console.log('🔌 WebSocket closed, reconnecting in 3s...');
+        status.textContent = 'Reconnecting...';
+        setTimeout(connectWebSocket, 3000);
+      };
+    }
+
+    // Play audio from data URI
+    function playAudio(audioDataUri) {
+      console.log('🔊 Playing audio');
+      audioElement.src = audioDataUri;
+      audioElement.play().catch(err => {
+        console.error('Failed to play audio:', err);
+        status.textContent = 'Playback error';
+      });
+    }
+
+    // Listen for audio play events
+    audioElement.addEventListener('play', () => {
+      avatar.classList.add('speaking');
+      status.textContent = 'Speaking...';
+    });
+
+    audioElement.addEventListener('pause', () => {
+      avatar.classList.remove('speaking');
+      status.textContent = 'Listening...';
+    });
+
+    audioElement.addEventListener('ended', () => {
+      avatar.classList.remove('speaking');
+      status.textContent = 'Ready';
+    });
+
+    // Initialize
+    if (botId) {
+      connectWebSocket();
+    } else {
+      status.textContent = 'Error: No bot ID';
+    }
+  </script>
+</body>
+</html>

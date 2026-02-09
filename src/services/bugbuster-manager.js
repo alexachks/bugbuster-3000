@@ -182,6 +182,10 @@ class AgentSDKManager {
       content: contentToAdd
     });
 
+    // Check if this is a Google Meet channel (starts with "test_" or contains "[Google Meet]")
+    const isGoogleMeet = channelId.startsWith('test_') ||
+                        (typeof userMessage === 'string' && userMessage.includes('[Google Meet]'));
+
     console.log(`📝 History length: ${history.length} messages`);
     console.log(`📤 Content type: ${Array.isArray(contentToAdd) ? 'multimodal' : 'text'}`);
     if (Array.isArray(contentToAdd)) {
@@ -189,12 +193,50 @@ class AgentSDKManager {
     }
     console.log(`📤 Sending to Anthropic API with ${history.length} messages`);
 
+    // Build system prompt with Google Meet rules if needed
+    let systemPrompt = this.systemPrompt;
+    if (isGoogleMeet) {
+      systemPrompt += `\n\n## GOOGLE MEET RULES (CRITICAL!)
+
+YOU ARE IN A GOOGLE MEET CALL. Follow these rules strictly:
+
+1. **MOSTLY LISTEN, RARELY SPEAK**
+   - Default behavior: observe and listen
+   - Only speak when DIRECTLY asked a question or explicitly requested to do something
+   - Examples of when to speak: "bugbuster what do you think?", "check the servers", "can you help with this?"
+   - Examples of when to stay SILENT: general discussion, people talking to each other, casual conversation
+
+2. **WHEN DOING WORK (using tools):**
+   - ALWAYS give quick initial response: "aight checking now" or "on it" or "lemme see"
+   - Then give progress updates while working: "checking awkward server..." → "ok awkward is good, checking supabase..."
+   - Finally give summary when done
+   - NEVER wait until everything is complete to respond
+
+3. **KEEP IT ULTRA SHORT**
+   - Each update: 1 sentence max
+   - No explanations unless asked
+   - Just facts and status
+
+Examples:
+- User: "check if everything is running"
+  You: "aight checking now" (immediately)
+  You: "awkward is up" (after first check)
+  You: "supabase good" (after second check)
+  You: "all servers running fine" (final summary)
+
+- User: "what do you guys think about the new feature?" (general question, not for you)
+  You: [SILENT]
+
+REMEMBER: You're a participant in a meeting, not leading it. Speak only when needed.`;
+      console.log(`🎙️  Using Google Meet mode with special rules`);
+    }
+
     try {
       const client = this.getClient();
       let response = await client.messages.create({
         model: 'claude-sonnet-4-5-20250929',
         max_tokens: 8192,
-        system: this.systemPrompt, // Casual style
+        system: systemPrompt, // With Google Meet rules if applicable
         messages: [...history], // Full history
         tools: tools // Add tools
       });
@@ -258,7 +300,9 @@ class AgentSDKManager {
         for (const toolCall of toolCalls) {
           console.log(`   - Executing: ${toolCall.name}`);
           try {
-            const result = await executeTool(toolCall.name, toolCall.input);
+            // Pass context (channelId) to tools that need it
+            const context = { channelId };
+            const result = await executeTool(toolCall.name, toolCall.input, context);
             toolResults.push({
               type: 'tool_result',
               tool_use_id: toolCall.id,

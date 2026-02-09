@@ -1,21 +1,32 @@
+// Load environment variables FIRST (before any other imports that use env vars)
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
+import http from 'http';
 
 // Import routes
 import cliqRoutes from './routes/cliq.js';
 import healthRoutes from './routes/health.js';
-
-// Load environment variables
-dotenv.config();
+import meetRoutes from './routes/meet.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for bot UI
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      connectSrc: ["'self'", "ws:", "wss:"] // Allow WebSocket connections
+    }
+  }
+}));
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
     ? true // Allow all origins in production for webhooks
@@ -32,9 +43,13 @@ app.use((req, res, next) => {
   next();
 });
 
+// Static files for bot UI
+app.use('/bot-ui', express.static('public'));
+
 // Routes
 app.use('/health', healthRoutes);
 app.use('/webhook/cliq', cliqRoutes);
+app.use('/meet', meetRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -53,8 +68,11 @@ app.use((req, res) => {
   });
 });
 
+// Create HTTP server
+const server = http.createServer(app);
+
 // Start server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🤖 BugBuster 3000 AI Agent running on port ${PORT}`);
   console.log(`🩺 Health check: http://localhost:${PORT}/health`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -62,10 +80,12 @@ app.listen(PORT, () => {
   console.log(`   - Claude SDK: ${process.env.ANTHROPIC_API_KEY ? '✓ Configured' : '✗ Missing'}`);
   console.log(`   - Cliq Webhook: ${process.env.CLIQ_BOT_WEBHOOK_URL ? '✓ Configured' : '✗ Missing'}`);
   console.log(`   - Jira: ${process.env.JIRA_API_TOKEN ? '✓ Configured' : '✗ Missing'}`);
-  console.log(`   - Repository: ${process.env.REPO_CLONE_PATH || '/tmp/repo'}`);
+  console.log(`   - Recall.ai: ${process.env.RECALL_AI_API_KEY ? '✓ Configured' : '✗ Missing'}`);
   console.log(`\n📍 Endpoints:`);
   console.log(`   - POST /webhook/cliq/participate - Cliq participation handler`);
   console.log(`   - GET  /webhook/cliq/health - Cliq integration health`);
+  console.log(`   - POST /meet/webhook - Recall.ai webhook handler`);
+  console.log(`   - GET  /meet/health - Meet integration health`);
   console.log(`   - GET  /health - Service health`);
 });
 
