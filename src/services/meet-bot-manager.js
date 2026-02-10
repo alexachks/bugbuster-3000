@@ -98,6 +98,8 @@ class MeetBotManager {
    * Check if channel is currently in a meeting
    */
   isChannelInMeeting(channelId) {
+    // Clean up stale bots before checking (runs on every check, but efficient - just loops through Map)
+    this.cleanupStaleBots();
     return this.getBotByChannelId(channelId) !== null;
   }
 
@@ -145,6 +147,33 @@ class MeetBotManager {
       botId,
       ...info
     }));
+  }
+
+  /**
+   * Clean up stale bots (older than 2 hours)
+   * Returns number of bots cleaned up
+   */
+  cleanupStaleBots() {
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+    const now = Date.now();
+    let cleanedCount = 0;
+
+    for (const [botId, info] of this.activeBots.entries()) {
+      const createdAt = new Date(info.createdAt).getTime();
+      const age = now - createdAt;
+
+      if (age > TWO_HOURS_MS) {
+        console.log(`🧹 Cleaning up stale bot ${botId} (age: ${Math.round(age / 1000 / 60)} minutes)`);
+        this.activeBots.delete(botId);
+        cleanedCount++;
+      }
+    }
+
+    if (cleanedCount > 0) {
+      console.log(`✅ Cleaned up ${cleanedCount} stale bots`);
+    }
+
+    return cleanedCount;
   }
 }
 
