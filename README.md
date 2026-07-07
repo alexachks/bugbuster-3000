@@ -2,7 +2,7 @@
 
 > AI-powered support agent for Zoho Cliq — your 24/7 technical assistant
 
-BugBuster lives in your Cliq channels, helping teams track bugs, investigate issues, and create Jira tickets automatically. Built with Claude Sonnet 4.5 for smart, conversational support.
+BugBuster lives in your Cliq channels, helping teams track bugs, investigate issues, and create Focus tasks automatically. Built with Claude Sonnet 4.5 for smart, conversational support.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
@@ -15,7 +15,7 @@ BugBuster lives in your Cliq channels, helping teams track bugs, investigate iss
 ### 🎯 Core Capabilities
 
 - **💬 Conversational AI** — Talks like a teammate, not a bot
-- **🎫 Jira Integration** — Automatically creates detailed tickets
+- **🎫 Focus Integration** — Automatically creates detailed tasks
 - **📸 Image Analysis** — Processes screenshots and error messages
 - **🔍 Server Log Access** — Checks remote servers via SSH
 - **🧠 Self-Learning** — Saves patterns to memory
@@ -38,7 +38,7 @@ graph LR
     B -->|HTTP POST| C[Node.js Server]
     C -->|Queue| D[Message Processor]
     D -->|Stream| E[Claude API]
-    E -->|Tools| F[SSH / Jira / Memory]
+    E -->|Tools| F[SSH / Focus / Memory]
     E -->|Response| G[Webhook]
     G -->|Post| A
 ```
@@ -48,7 +48,7 @@ graph LR
 1. **Message arrives** from Cliq participation handler
 2. **Queued per channel** to prevent concurrent API calls
 3. **Claude processes** with full conversation history
-4. **Tools execute** (SSH logs, Jira tickets, memory updates)
+4. **Tools execute** (SSH logs, Focus tasks, memory updates)
 5. **Responses stream** back to Cliq in real-time
 
 ### Key Components
@@ -57,7 +57,7 @@ graph LR
 |-----------|---------|
 | `src/routes/cliq.js` | Handles Cliq webhooks & message routing |
 | `src/services/bugbuster-manager.js` | Manages per-channel sessions & message queue |
-| `src/tools/agent-tools.js` | Custom tools (SSH, Jira, memory) |
+| `src/tools/` | Custom tools (SSH, Focus, memory) |
 | `.claude/CLAUDE.md` | System prompt & behavior instructions |
 
 ---
@@ -69,7 +69,7 @@ graph LR
 - Node.js 20+
 - Anthropic API key ([get one here](https://console.anthropic.com))
 - Zoho Cliq bot
-- Jira Cloud instance
+- Focus account + bot API token (scoped to the Awkward Media project)
 
 ### Installation
 
@@ -120,11 +120,11 @@ ANTHROPIC_API_KEY=sk-ant-xxx
 # Bot webhook URL - для отправки сообщений в Cliq
 CLIQ_BOT_WEBHOOK_URL=https://cliq.zoho.com/api/v2/bots/bugbuster/incoming?zapikey=xxx
 
-# Jira Integration
-JIRA_BASE_URL=https://your-domain.atlassian.net
-JIRA_EMAIL=your-email@example.com
-JIRA_API_TOKEN=your_jira_api_token
-JIRA_PROJECT_KEY=AM
+# Focus Integration (task creation)
+# Base URL of Focus; the bot posts to <base>/api/integrations/tasks
+FOCUS_API_BASE_URL=https://team.the-314.com
+# Narrow bot token scoped to the Awkward Media project (see project Passwords)
+FOCUS_API_TOKEN=your_focus_api_token
 
 # === OPTIONAL ===
 
@@ -254,7 +254,7 @@ BugBuster: np 👍
 
 ### Creating Tickets
 
-BugBuster automatically creates Jira tickets when issues are reported:
+BugBuster automatically creates Focus tasks when issues are reported:
 
 ```
 User: when users click "submit" button nothing happens
@@ -306,14 +306,17 @@ Execute SSH commands on remote servers
 }
 ```
 
-### 2. `create_jira_ticket`
-Create Jira tickets
+### 2. `create_task`
+Create tasks in Focus (project + assignee are resolved server-side from the token).
+`priority` and `labels` are folded into the description since the Focus endpoint
+only accepts `title` and `description`.
 
 ```javascript
 {
-  summary: "Login page 500 error",
+  title: "Login page 500 error",
   description: "Users seeing 500 error on /login...",
-  priority: "High"
+  priority: "High",
+  labels: ["bug", "backend"]
 }
 ```
 
@@ -333,7 +336,7 @@ Save learnings to agent memory
 
 ### Bulk Create Tickets from Chat History
 
-Extract bug reports from old chat messages and create Jira tickets:
+Extract bug reports from old chat messages and create Focus tasks:
 
 ```bash
 # Export chat messages to messages.md
@@ -344,7 +347,7 @@ node scripts/create-tickets-from-file.js messages.md
 **What it does:**
 1. Reads chat history from file
 2. Uses Claude to extract real issues (filters out casual chat)
-3. Creates Jira tickets for each issue
+3. Creates Focus tasks for each issue
 4. Skips already-created tickets and fixed issues
 
 **Example output:**
@@ -353,7 +356,7 @@ node scripts/create-tickets-from-file.js messages.md
   1. [High] Crawl Site Error - by Inza Khan
   2. [Medium] Unable to assign tickets - by Umair K
 
-🎫 Creating Jira tickets...
+🎫 Creating Focus tasks...
   ✅ Created AM-15: Crawl Site Error
   ✅ Created AM-16: Unable to assign tickets
 
@@ -549,7 +552,7 @@ BugBuster's personality is defined in [`.claude/CLAUDE.md`](.claude/CLAUDE.md):
 
 - Casual, friendly tone
 - No tech jargon with users
-- Saves technical details for Jira only
+- Saves technical details for the task only
 - Stays silent for off-topic chat
 - Proactively creates tickets
 
@@ -601,7 +604,7 @@ MIT © Awkward Media
 Built with:
 - [Anthropic Claude](https://anthropic.com) - AI model
 - [Zoho Cliq](https://zoho.com/cliq) - Team messaging
-- [Jira](https://atlassian.com/jira) - Issue tracking
+- Focus - Task tracking
 
 ---
 

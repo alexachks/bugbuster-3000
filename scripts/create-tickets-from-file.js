@@ -1,5 +1,5 @@
 /**
- * Bulk create Jira tickets from chat messages file
+ * Bulk create Focus tasks from chat messages file
  *
  * Usage:
  * node create-tickets-from-file.js messages.md
@@ -12,10 +12,8 @@ import fs from 'fs/promises';
 dotenv.config();
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const JIRA_BASE_URL = process.env.JIRA_BASE_URL;
-const JIRA_EMAIL = process.env.JIRA_EMAIL;
-const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN;
-const JIRA_PROJECT_KEY = process.env.JIRA_PROJECT_KEY;
+const FOCUS_API_BASE_URL = process.env.FOCUS_API_BASE_URL;
+const FOCUS_API_TOKEN = process.env.FOCUS_API_TOKEN;
 
 // Read messages from file
 async function readMessagesFromFile(filePath) {
@@ -91,59 +89,42 @@ If no NEW issues found (all are either fixed or already ticketed), return empty 
   }
 }
 
-// Create Jira ticket
-async function createJiraTicket(issue) {
-  const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString('base64');
+// Create Focus task
+// Focus only accepts { title, description }; project/assignee come from the token.
+// Fold priority + reporter into the description so nothing is lost.
+async function createFocusTask(issue) {
+  const metaLines = [];
+  if (issue.priority) metaLines.push(`Priority: ${issue.priority}`);
+  if (issue.reporter) metaLines.push(`Reporter: ${issue.reporter}`);
 
-  // Convert plain text description to Atlassian Document Format
-  const description = {
-    type: 'doc',
-    version: 1,
-    content: [
-      {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: issue.description
-          }
-        ]
-      }
-    ]
-  };
+  let description = issue.description;
+  if (metaLines.length > 0) {
+    description += `\n\n---\n${metaLines.join('\n')}`;
+  }
 
-  const payload = {
-    fields: {
-      project: {
-        key: JIRA_PROJECT_KEY
-      },
-      summary: issue.summary,
-      description: description,
-      issuetype: {
-        name: 'Task'
-      },
-      priority: {
-        name: issue.priority || 'Medium'
-      }
-    }
-  };
+  const endpoint = `${FOCUS_API_BASE_URL.replace(/\/+$/, '')}/api/integrations/tasks`;
 
-  const response = await fetch(`${JIRA_BASE_URL}/rest/api/3/issue`, {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Authorization': `Basic ${auth}`,
+      'Authorization': `Bearer ${FOCUS_API_TOKEN}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ title: issue.summary, description })
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Failed to create ticket: ${response.status} - ${error}`);
+    throw new Error(`Failed to create task: ${response.status} - ${error}`);
   }
 
-  const data = await response.json();
-  return data.key;
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Empty / non-JSON body still means success (2xx).
+  }
+  return data.id || data.taskId || data.key || 'created';
 }
 
 // Main
@@ -167,13 +148,13 @@ async function main() {
     console.log(`  ${i + 1}. [${issue.priority}] ${issue.summary} (by ${issue.reporter})`);
   });
 
-  console.log('\n🎫 Creating Jira tickets...');
+  console.log('\n🎫 Creating Focus tasks...');
   for (const issue of issues) {
     try {
-      const ticketKey = await createJiraTicket(issue);
-      console.log(`  ✅ Created ${ticketKey}: ${issue.summary}`);
+      const taskId = await createFocusTask(issue);
+      console.log(`  ✅ Created ${taskId}: ${issue.summary}`);
     } catch (error) {
-      console.error(`  ❌ Failed to create ticket for "${issue.summary}":`, error.message);
+      console.error(`  ❌ Failed to create task for "${issue.summary}":`, error.message);
     }
   }
 

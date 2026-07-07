@@ -79,7 +79,7 @@ server.listen(PORT, () => {
   console.log(`\n🔧 Configuration:`);
   console.log(`   - Claude SDK: ${process.env.ANTHROPIC_API_KEY ? '✓ Configured' : '✗ Missing'}`);
   console.log(`   - Cliq Webhook: ${process.env.CLIQ_BOT_WEBHOOK_URL ? '✓ Configured' : '✗ Missing'}`);
-  console.log(`   - Jira: ${process.env.JIRA_API_TOKEN ? '✓ Configured' : '✗ Missing'}`);
+  console.log(`   - Focus: ${process.env.FOCUS_API_TOKEN ? '✓ Configured' : '✗ Missing'}`);
   console.log(`   - Recall.ai: ${process.env.RECALL_AI_API_KEY ? '✓ Configured' : '✗ Missing'}`);
   console.log(`\n📍 Endpoints:`);
   console.log(`   - POST /webhook/cliq/participate - Cliq participation handler`);
