@@ -3,7 +3,7 @@
  * Central export for all BugBuster tools
  */
 
-import * as createJiraTicket from './create-jira-ticket/index.js';
+import * as createTask from './create-task/index.js';
 import * as serverExec from './server-exec/index.js';
 import * as updateMemory from './update-memory/index.js';
 import * as joinMeet from './join-meet/index.js';
@@ -11,7 +11,7 @@ import * as joinMeet from './join-meet/index.js';
 // Tool definitions for Anthropic API
 export const tools = [
   serverExec.definition,
-  createJiraTicket.definition,
+  createTask.definition,
   updateMemory.definition,
   joinMeet.definition
 ];
@@ -21,8 +21,8 @@ export async function executeTool(toolName, input, context) {
   switch (toolName) {
     case 'server_exec':
       return await serverExec.execute(input);
-    case 'create_jira_ticket':
-      return await createJiraTicket.execute(input);
+    case 'create_task':
+      return await createTask.execute(input);
     case 'update_memory':
       return await updateMemory.execute(input);
     case 'join_google_meet':

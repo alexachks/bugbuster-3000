@@ -64,10 +64,8 @@ jobs:
           CLIQ_CLIENT_ID=${{ secrets.CLIQ_CLIENT_ID }}
           CLIQ_CLIENT_SECRET=${{ secrets.CLIQ_CLIENT_SECRET }}
 
-          JIRA_BASE_URL=${{ secrets.JIRA_BASE_URL }}
-          JIRA_EMAIL=${{ secrets.JIRA_EMAIL }}
-          JIRA_API_TOKEN=${{ secrets.JIRA_API_TOKEN }}
-          JIRA_PROJECT_KEY=${{ secrets.JIRA_PROJECT_KEY }}
+          FOCUS_API_BASE_URL=${{ secrets.FOCUS_API_BASE_URL }}
+          FOCUS_API_TOKEN=${{ secrets.FOCUS_API_TOKEN }}
 
           PORT=3002
           NODE_ENV=production

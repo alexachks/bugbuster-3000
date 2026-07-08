@@ -20,7 +20,7 @@ export const definition = {
       },
       category: {
         type: 'string',
-        enum: ['jira', 'debugging', 'user-preferences', 'common-issues', 'workflow'],
+        enum: ['focus', 'debugging', 'user-preferences', 'common-issues', 'workflow'],
         description: 'Category for this memory'
       }
     },

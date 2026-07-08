@@ -11,7 +11,7 @@ router.get('/', (req, res) => {
     features: {
       claudeAPI: process.env.ANTHROPIC_API_KEY ? 'enabled' : 'disabled',
       cliqWebhook: process.env.CLIQ_BOT_WEBHOOK_URL ? 'enabled' : 'disabled',
-      jiraIntegration: process.env.JIRA_API_TOKEN ? 'enabled' : 'disabled'
+      focusIntegration: process.env.FOCUS_API_TOKEN ? 'enabled' : 'disabled'
     }
   };
 
@@ -41,8 +41,8 @@ router.get('/detailed', async (req, res) => {
     ? { status: 'configured', message: 'Webhook URL present' }
     : { status: 'missing', message: 'Webhook URL not configured' };
 
-  // Check Jira configuration
-  checks.checks.jira = process.env.JIRA_API_TOKEN
+  // Check Focus configuration
+  checks.checks.focus = process.env.FOCUS_API_TOKEN
     ? { status: 'configured', message: 'API token present' }
     : { status: 'missing', message: 'API token not configured' };
 
