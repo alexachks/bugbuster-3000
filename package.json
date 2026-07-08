@@ -1,7 +1,7 @@
 {
   "name": "ai-agent",
   "version": "1.0.0",
-  "description": "AI Agent for Cliq bug analysis and Jira ticket creation",
+  "description": "AI Agent for Cliq bug analysis and Focus task creation",
   "main": "src/server.js",
   "type": "module",
   "scripts": {
@@ -28,7 +28,7 @@
     "agent",
     "claude",
     "cliq",
-    "jira",
+    "focus",
     "automation"
   ],
   "author": "Awkward Media",
