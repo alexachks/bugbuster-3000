@@ -5,6 +5,7 @@
 
 import express from 'express';
 import { agentManager } from '../services/bugbuster-manager.js';
+import { requireCliqWebhookToken } from '../middleware/cliq-webhook-auth.js';
 
 const router = express.Router();
 
@@ -76,14 +77,8 @@ export async function sendViaWebhook(channelId, channelName, text) {
  * Participation Handler
  * Handles messages from Cliq channels where bot participates
  */
-router.post('/participate', express.urlencoded({ extended: true }), express.json(), async (req, res) => {
+router.post('/participate', requireCliqWebhookToken, express.urlencoded({ extended: true }), express.json(), async (req, res) => {
   try {
-    console.log(`\n📥 ========== FULL REQUEST DEBUG ==========`);
-    console.log(`📥 Headers:`, JSON.stringify(req.headers, null, 2));
-    console.log(`📥 Query:`, JSON.stringify(req.query, null, 2));
-    console.log(`📥 Body:`, JSON.stringify(req.body, null, 2));
-    console.log(`📥 ==========================================\n`);
-
     const { message_object, user_name, channel_id, channel_name } = req.body;
 
     // Parse message object if it's a string
@@ -111,9 +106,7 @@ router.post('/participate', express.urlencoded({ extended: true }), express.json
       });
     }
 
-    console.log(`\n📨 Participation: ${user_name} in ${channel_name}`);
-    console.log(`Message: ${messageText.substring(0, 100)}...`);
-    console.log(`Attachments: ${attachments.length}`);
+    console.log(`📨 Cliq message in ${channel_name} (${attachments.length} attachments)`);
 
     // Validate required fields
     if (!user_name || !channel_id) {
@@ -252,7 +245,7 @@ async function processWithAgentSDK(data) {
 /**
  * Reset session for a channel (for testing/debugging)
  */
-router.post('/reset-session/:channelId', (req, res) => {
+router.post('/reset-session/:channelId', requireCliqWebhookToken, (req, res) => {
   const { channelId } = req.params;
 
   agentManager.closeSession(channelId);

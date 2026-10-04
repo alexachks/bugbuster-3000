@@ -12,6 +12,7 @@ import http from 'http';
 import cliqRoutes from './routes/cliq.js';
 import healthRoutes from './routes/health.js';
 import meetRoutes from './routes/meet.js';
+import { logCliqWebhookAuthMode } from './middleware/cliq-webhook-auth.js';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -81,6 +82,7 @@ server.listen(PORT, () => {
   console.log(`   - Cliq Webhook: ${process.env.CLIQ_BOT_WEBHOOK_URL ? '✓ Configured' : '✗ Missing'}`);
   console.log(`   - Focus: ${process.env.FOCUS_API_TOKEN ? '✓ Configured' : '✗ Missing'}`);
   console.log(`   - Recall.ai: ${process.env.RECALL_AI_API_KEY ? '✓ Configured' : '✗ Missing'}`);
+  logCliqWebhookAuthMode();
   console.log(`\n📍 Endpoints:`);
   console.log(`   - POST /webhook/cliq/participate - Cliq participation handler`);
   console.log(`   - GET  /webhook/cliq/health - Cliq integration health`);
