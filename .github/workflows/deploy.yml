@@ -63,6 +63,7 @@ jobs:
           CLIQ_REFRESH_TOKEN=${{ secrets.CLIQ_REFRESH_TOKEN }}
           CLIQ_CLIENT_ID=${{ secrets.CLIQ_CLIENT_ID }}
           CLIQ_CLIENT_SECRET=${{ secrets.CLIQ_CLIENT_SECRET }}
+          CLIQ_WEBHOOK_TOKEN=${{ secrets.CLIQ_WEBHOOK_TOKEN }}
 
           FOCUS_API_BASE_URL=${{ secrets.FOCUS_API_BASE_URL }}
           FOCUS_API_TOKEN=${{ secrets.FOCUS_API_TOKEN }}

@@ -5,75 +5,117 @@
 
 import { Client } from 'ssh2';
 
-// Whitelist of allowed command prefixes
-const ALLOWED_COMMANDS = [
-  // Docker read-only
-  'docker ps',
-  'docker logs',
-  'docker inspect',
-  'docker stats',
-  'docker top',
-  'docker exec',
+const FORBIDDEN_CHARACTERS = /[;|&$`<>(){}\\\x00-\x1f\x7f]/;
+const SAFE_TOKEN = /^[A-Za-z0-9_.:-]+$/;
+const CONTAINER_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
+const LINE_COUNT = /^[1-9][0-9]{0,4}$/;
+const LOG_SINCE = /^(?:[0-9]+[smh])+$|^[0-9]{4}-[0-9]{2}-[0-9]{2}(?:T[0-9]{2}:[0-9]{2}(?::[0-9]{2})?Z?)?$/;
 
-  // Docker safe actions
-  'docker restart',
+const DOCKER_LOGS_VALUE_OPTIONS = new Map([['--tail', LINE_COUNT], ['-n', LINE_COUNT], ['--since', LOG_SINCE]]);
+const DOCKER_LOGS_FLAGS = new Set(['-t', '--timestamps']);
+const DOCKER_STATS_FLAGS = new Set(['--no-stream', '-a', '--all', '--no-trunc']);
 
-  // System diagnostics
-  'free',
-  'df',
-  'top',
-  'htop',
-  'uptime',
-  'ps',
-  'du',
+function onlyFlags(...allowed) {
+  const flags = new Set(allowed);
+  return (args) => args.every(arg => flags.has(arg));
+}
 
-  // Network
-  'netstat',
-  'ss',
-  'lsof',
-  'ping',
-  'curl',
-  'wget',
-  'traceroute',
+function isDockerLogsArgs(args) {
+  let container = null;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    const valuePattern = DOCKER_LOGS_VALUE_OPTIONS.get(arg);
+    if (valuePattern) {
+      i++;
+      if (i >= args.length || !valuePattern.test(args[i])) return false;
+    } else if (DOCKER_LOGS_FLAGS.has(arg)) {
+      continue;
+    } else if (container === null && CONTAINER_NAME.test(arg)) {
+      container = arg;
+    } else {
+      return false;
+    }
+  }
+  return container !== null;
+}
 
-  // File reading
-  'cat',
-  'head',
-  'tail',
-  'less',
-  'more',
-  'grep',
-  'find',
-  'ls',
-  'tree',
+function isDockerStatsArgs(args) {
+  return args.includes('--no-stream') &&
+    args.every(arg => DOCKER_STATS_FLAGS.has(arg) || CONTAINER_NAME.test(arg));
+}
 
-  // System info
-  'uname',
-  'whoami',
-  'hostname',
-  'date',
-  'env',
-  'printenv'
+// Read-only diagnostics only: nothing here can write, exec into a container or print env/config.
+const ALLOWED_FORMS = [
+  {
+    usage: 'docker ps [-a] [-s] [-q] [--no-trunc]',
+    prefix: ['docker', 'ps'],
+    isValidArgs: onlyFlags('-a', '--all', '-s', '--size', '-q', '--quiet', '--no-trunc')
+  },
+  {
+    usage: 'docker logs <container> [--tail N] [--since 30m|2026-01-31T12:00:00Z] [-t]',
+    prefix: ['docker', 'logs'],
+    isValidArgs: isDockerLogsArgs
+  },
+  {
+    usage: 'docker stats --no-stream [-a] [--no-trunc] [container ...]',
+    prefix: ['docker', 'stats'],
+    isValidArgs: isDockerStatsArgs
+  },
+  { usage: 'df [-h] [-i] [-T]', prefix: ['df'], isValidArgs: onlyFlags('-h', '-i', '-T') },
+  { usage: 'free [-h|-m|-g]', prefix: ['free'], isValidArgs: onlyFlags('-h', '-m', '-g') },
+  { usage: 'uptime [-p]', prefix: ['uptime'], isValidArgs: onlyFlags('-p') }
 ];
+
+const ALLOWED_USAGE = ALLOWED_FORMS.map(form => `- ${form.usage}`).join('\n');
+
+function rejectCommand(command, reason) {
+  return new Error(
+    `Command not allowed: ${JSON.stringify(command)} (${reason})\n\n` +
+    `Only these read-only commands are accepted (no pipes, redirects, chaining or substitution):\n${ALLOWED_USAGE}`
+  );
+}
+
+/**
+ * Validate a command against the read-only allowlist.
+ * Returns the canonical command (validated tokens joined by single spaces); throws if not allowed.
+ */
+export function validateCommand(command) {
+  if (typeof command !== 'string') {
+    throw rejectCommand(command, 'command must be a string');
+  }
+  if (FORBIDDEN_CHARACTERS.test(command)) {
+    throw rejectCommand(command, 'shell metacharacters or control characters');
+  }
+
+  const tokens = command.trim().split(/ +/);
+  if (!tokens.every(token => SAFE_TOKEN.test(token))) {
+    throw rejectCommand(command, 'unexpected characters in arguments');
+  }
+
+  const form = ALLOWED_FORMS.find(candidate =>
+    candidate.prefix.every((word, i) => tokens[i] === word)
+  );
+  if (!form || !form.isValidArgs(tokens.slice(form.prefix.length))) {
+    throw rejectCommand(command, 'not an allowed command form');
+  }
+
+  return tokens.join(' ');
+}
 
 export const definition = {
   name: 'server_exec',
-  description: `Execute diagnostic commands on remote servers via SSH.
+  description: `Run a read-only diagnostic command on a remote server via SSH.
 
 Available servers are configured via SERVER_* environment variables.
 
-Allowed commands (whitelist):
-- Docker: ps, logs, inspect, stats, top, restart, exec
-- System: free, df, top, htop, uptime, ps, du
-- Network: netstat, ss, lsof, ping, curl, wget
-- Files: cat, head, tail, ls, grep, find, tree
-- Info: uname, whoami, hostname, date, env
+Only these exact command forms are accepted (no pipes, redirects, chaining or substitution):
+${ALLOWED_USAGE}
 
 Examples:
 - "docker ps -a" - list all containers
-- "docker logs app-name --tail 100" - recent logs
-- "free -h" - memory usage
-- "curl http://localhost:3000/health" - check endpoint`,
+- "docker logs awkward-seo-engine --tail 100 --since 30m" - recent logs
+- "docker stats --no-stream" - CPU/memory per container
+- "free -m" - memory usage`,
 
   input_schema: {
     type: 'object',
@@ -84,7 +126,7 @@ Examples:
       },
       command: {
         type: 'string',
-        description: 'Command to execute (must start with allowed command from whitelist)'
+        description: 'One of the allowed read-only command forms listed above'
       }
     },
     required: ['server', 'command']
@@ -112,27 +154,6 @@ function getAvailableServers() {
   });
 
   return servers;
-}
-
-/**
- * Validate command against whitelist
- */
-function validateCommand(command) {
-  const trimmed = command.trim();
-
-  // Check if command starts with any allowed prefix
-  const isAllowed = ALLOWED_COMMANDS.some(allowed =>
-    trimmed.startsWith(allowed)
-  );
-
-  if (!isAllowed) {
-    throw new Error(
-      `Command not allowed: "${trimmed}"\n\n` +
-      `Allowed commands: ${ALLOWED_COMMANDS.join(', ')}`
-    );
-  }
-
-  return trimmed;
 }
 
 /**
