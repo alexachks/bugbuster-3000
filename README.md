@@ -119,6 +119,8 @@ ANTHROPIC_API_KEY=sk-ant-xxx
 # Cliq Integration
 # Bot webhook URL - для отправки сообщений в Cliq
 CLIQ_BOT_WEBHOOK_URL=https://cliq.zoho.com/api/v2/bots/bugbuster/incoming?zapikey=xxx
+# Shared secret for incoming Cliq calls (see "Webhook authentication" below)
+CLIQ_WEBHOOK_TOKEN=generate-with-openssl-rand-hex-32
 
 # Focus Integration (task creation)
 # Base URL of Focus; the bot posts to <base>/api/integrations/tasks
@@ -207,6 +209,10 @@ if(channelName == null || channelName == "") {
 // Your server URL
 webhookUrl = "http://YOUR_SERVER:3002/webhook/cliq/participate";
 
+// Shared secret: same value as CLIQ_WEBHOOK_TOKEN on the server
+authHeaders = Map();
+authHeaders.put("X-Cliq-Webhook-Token", "YOUR_CLIQ_WEBHOOK_TOKEN");
+
 // Send to your server
 payload = Map();
 payload.put("message_object", fullMessage);
@@ -218,10 +224,32 @@ invokeurl [
     url: webhookUrl
     type: POST
     parameters: payload
+    headers: authHeaders
 ];
 
 return Map();  // Don't respond directly
 ```
+
+#### Webhook authentication
+
+Every `POST /webhook/cliq/*` request (`/participate`, `/reset-session/:channelId`) is checked
+against `CLIQ_WEBHOOK_TOKEN`. The participation handler above sends it in the
+`X-Cliq-Webhook-Token` header (a header, not a URL parameter, so it never lands in access logs).
+The comparison is constant-time.
+
+- `CLIQ_WEBHOOK_TOKEN` set → requests without the matching header get `401` and are not processed.
+- `CLIQ_WEBHOOK_TOKEN` empty → requests are accepted without authentication and the server logs a
+  warning at startup. This mode exists only so a deploy never takes the bot down; do not leave it on.
+
+Turning enforcement on (order matters, otherwise the bot stops answering in between):
+
+1. Generate a token: `openssl rand -hex 32`.
+2. Add the `headers: authHeaders` line from the snippet above to the participation handler in Cliq,
+   with that token. Harmless while the server is not enforcing yet.
+3. Add the same value as the GitHub secret `CLIQ_WEBHOOK_TOKEN` and re-run the latest
+   **Deploy to Production** run in GitHub Actions. The deploy rewrites `.env` from secrets, so editing `.env`
+   on the host by hand is lost on the next deploy.
+4. Check the startup log shows `Cliq webhook auth: ✓ Enforced`, then send a message in a channel.
 
 #### Step 4: Add Bot to Channel
 
@@ -297,14 +325,33 @@ User2: ok cool
 BugBuster has these custom capabilities:
 
 ### 1. `server_exec`
-Execute SSH commands on remote servers
+Run read-only diagnostic commands on remote servers over SSH
 
 ```javascript
 {
   server: "supabase" | "awkward" | "seoengine",
-  command: "tail -100 /var/log/app.log | grep error"
+  command: "docker logs awkward-seo-engine --tail 100 --since 30m"
 }
 ```
+
+The command is parsed into words and must match one of these forms exactly; anything else is
+refused before an SSH connection is opened:
+
+| Command | Allowed arguments |
+|---------|-------------------|
+| `docker ps` | `-a`/`--all`, `-s`/`--size`, `-q`/`--quiet`, `--no-trunc` |
+| `docker logs <container>` | `--tail N` / `-n N`, `--since 30m` / `--since 2026-01-31T12:00:00Z`, `-t`/`--timestamps` |
+| `docker stats --no-stream` | `-a`/`--all`, `--no-trunc`, container names |
+| `df` | `-h`, `-i`, `-T` |
+| `free` | `-h`, `-m`, `-g` |
+| `uptime` | `-p` |
+
+Shell metacharacters and control characters (`` ; | & $ ` > < ( ) { } \ ``, newlines, tabs) are
+rejected outright, so commands cannot be chained, piped, redirected or substituted. There is no
+`docker exec`, `docker inspect`, `docker restart`, `curl`, `wget`, `env`, `printenv`, `cat` or
+`ps`: those can change state or print secrets (container env, config files, process arguments).
+The allowlist and its tests live in `src/tools/server-exec/index.js` and
+`test/server-exec.test.js`.
 
 ### 2. `create_task`
 Create tasks in Focus (project + assignee are resolved server-side from the token).
@@ -449,7 +496,8 @@ curl http://localhost:3002/webhook/cliq/health
 If agent gets confused, reset the channel session:
 
 ```bash
-curl -X POST http://localhost:3002/webhook/cliq/reset-session/CT_123456
+curl -X POST -H "X-Cliq-Webhook-Token: $CLIQ_WEBHOOK_TOKEN" \
+  http://localhost:3002/webhook/cliq/reset-session/CT_123456
 ```
 
 ---
@@ -525,6 +573,7 @@ docker logs bugbuster-3000 --tail=100
 
 **Common issues:**
 - ❌ Wrong `CLIQ_BOT_WEBHOOK_URL` → verify webhook URL
+- ❌ `Rejected Cliq request without a valid token` in logs → the token in the participation handler doesn't match `CLIQ_WEBHOOK_TOKEN`
 - ❌ Deluge script not updated → check participation handler
 - ❌ Bot not invited to channel → `/invite @BugBuster 3000`
 
@@ -541,7 +590,8 @@ curl -X POST "$CLIQ_BOT_WEBHOOK_URL" \
 
 **Reset session to clear context:**
 ```bash
-curl -X POST http://localhost:3002/webhook/cliq/reset-session/CHANNEL_ID
+curl -X POST -H "X-Cliq-Webhook-Token: $CLIQ_WEBHOOK_TOKEN" \
+  http://localhost:3002/webhook/cliq/reset-session/CHANNEL_ID
 ```
 
 ---
@@ -567,6 +617,7 @@ Pull requests welcome! For major changes, please open an issue first.
 ```bash
 npm install
 npm run dev  # starts with nodemon
+npm test     # node --test: server_exec allowlist + webhook auth
 ```
 
 ### Project Structure
