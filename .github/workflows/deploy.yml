@@ -53,6 +53,12 @@ jobs:
 
             # Create/update .env file from secrets
             echo "⚙️  Updating .env file..."
+            # Passwords go in SINGLE quotes. Compose interpolates $NAME inside double
+            # quotes in an env_file, so a password containing $ reached the container
+            # cut short: SERVER_AWKWARD_PASSWORD had one, and every SSH login to the
+            # app server failed with "All configured authentication methods failed".
+            # Single quotes are taken literally. A password containing ' would break
+            # this line; none does.
             cat > .env << 'ENVEOF'
           ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
 
@@ -73,15 +79,15 @@ jobs:
 
           SERVER_SUPABASE_HOST=${{ secrets.SERVER_SUPABASE_HOST }}
           SERVER_SUPABASE_USER=${{ secrets.SERVER_SUPABASE_USER }}
-          SERVER_SUPABASE_PASSWORD="${{ secrets.SERVER_SUPABASE_PASSWORD }}"
+          SERVER_SUPABASE_PASSWORD='${{ secrets.SERVER_SUPABASE_PASSWORD }}'
 
           SERVER_AWKWARD_HOST=${{ secrets.SERVER_AWKWARD_HOST }}
           SERVER_AWKWARD_USER=${{ secrets.SERVER_AWKWARD_USER }}
-          SERVER_AWKWARD_PASSWORD="${{ secrets.SERVER_AWKWARD_PASSWORD }}"
+          SERVER_AWKWARD_PASSWORD='${{ secrets.SERVER_AWKWARD_PASSWORD }}'
 
           SERVER_SEOENGINE_HOST=${{ secrets.SERVER_SEOENGINE_HOST }}
           SERVER_SEOENGINE_USER=${{ secrets.SERVER_SEOENGINE_USER }}
-          SERVER_SEOENGINE_PASSWORD="${{ secrets.SERVER_SEOENGINE_PASSWORD }}"
+          SERVER_SEOENGINE_PASSWORD='${{ secrets.SERVER_SEOENGINE_PASSWORD }}'
 
           RECALL_AI_API_KEY=${{ secrets.RECALL_AI_API_KEY }}
           RECALL_WEBHOOK_SECRET=${{ secrets.RECALL_WEBHOOK_SECRET }}
